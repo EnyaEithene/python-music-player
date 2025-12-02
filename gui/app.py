@@ -43,5 +43,15 @@ class MusicApp:
         )
         print("Selected files:", filepaths)
 
+    def play_selected_song(self):
+        selection = self.library_listbox.curselection()
+        if not selection:
+            return
+
+        index = selection[0]
+        song_path = self.library_songs[index]["filepath"]
+
+        self.player.play_song(song_path)
+
     def show_about(self):
         messagebox.showinfo("About", "Music Player v1.0")

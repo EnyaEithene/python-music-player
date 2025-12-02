@@ -16,8 +16,10 @@ class PlaylistGUI:
 
         self.add_btn = ttk.Button(self.frame, text="Add", command=self.add_playlist)
         self.del_btn = ttk.Button(self.frame, text="Delete", command=self.delete_playlist)
+        self.show_all_btn = ttk.Button(self.frame, text="All Songs", command=self.show_all_songs)
         self.add_btn.pack(side="left", padx=5)
         self.del_btn.pack(side="left", padx=5)
+        self.show_all_btn.pack(fill="x", pady=(0,5))
 
         self.listbox.bind("<<ListboxSelect>>", self.on_playlist_select)
 
@@ -35,8 +37,9 @@ class PlaylistGUI:
         for pl in playlists:
             self.listbox.insert(END, pl["name"]) 
 
+    # Selectare playlist
     def on_playlist_select(self, event):
-        # Get the selected playlist index
+        # Preluare index playlist
         selection = self.listbox.curselection()
         if not selection:
             return
@@ -45,9 +48,10 @@ class PlaylistGUI:
         playlists = db.get_playlists()
         playlist_id = playlists[index]["id"]
 
-        # Tell the PlayerGUI to load songs for this playlist
+        # Afisare melodii ale playlist-ului selectat
         self.app.player.load_songs_for_playlist(playlist_id)
 
+    # Afisare melodii din playlist selectat
     def load_songs_for_playlist(self, playlist_id):
         self.listbox.delete(0, "end")
         songs = db.get_songs_in_playlist(playlist_id)
@@ -87,7 +91,16 @@ class PlaylistGUI:
         
         # Se sterge melodia daca se confirma
         if confirm:
-            db.delete_playlist(pl_id)  # Delete from DB
-            self.load_playlists()            # Refresh Listbox
+            db.delete_playlist(pl_id)
+            self.load_playlists()       
 
-    
+    # Afisare melodii salvate in BD
+    def show_all_songs(self):
+        self.app.player.load_library_songs()
+
+    def load_library_songs(self):
+            self.song_list.delete(0, END)
+
+            songs = db.get_all_songs()
+            for s in songs:
+                self.song_list.insert(END, f"{s[2]} - {s[3]}")  # title - artist
