@@ -1,7 +1,7 @@
 import os
 import shutil
-from tkinter import Listbox, filedialog, simpledialog, ttk, DoubleVar, Tk, END
-import vlc  # pip install python-vlc
+from tkinter import Listbox, filedialog, simpledialog, ttk, DoubleVar, END
+import vlc
 from tinytag import TinyTag
 from db import database as db  # your database module
 
@@ -18,9 +18,9 @@ class PlayerGUI:
         self.listbox = Listbox(self.frame, height=10)
         self.listbox.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Playback buttons
+        # Buttons
         self.add_to_playlist_btn = ttk.Button(self.frame, text="Add to Playlist", command=self.add_song_to_playlist)
-        self.play_btn = ttk.Button(self.frame, text="Play", command=self.play_song)
+        self.play_btn = ttk.Button(self.frame, text="Play", command=self.toggle_play)
         self.stop_btn = ttk.Button(self.frame, text="Stop", command=self.stop_song)
         self.add_to_playlist_btn.pack(side="right", padx=5)
         self.play_btn.pack(side="left", padx=5)
@@ -29,7 +29,7 @@ class PlayerGUI:
         # Progress bar (seek)
         self.progress_var = DoubleVar()
         self.progress_var.set(0)
-        self.progress = ttk.Scale(self.frame, from_=0, to=100, variable=self.progress_var, orient="horizontal")
+        self.progress = ttk.Scale(self.frame, from_=0, to=100, variable=self.progress_var, orient="horizontal", command=self.seek_song)
         self.progress.pack(fill="x")
 
         # VLC player
@@ -39,47 +39,79 @@ class PlayerGUI:
         self.repeat = False
         self.seeking = False
         self.playing = False
-        self.song_length = 0
         self.paused = False
         self.current_pos = 0  # in milliseconds
+        self.song_length = 0
 
-        # Load library songs
+        # Load songs from DB
         self.load_library_songs()
 
-    # Load all songs from DB
+    # Load songs
     def load_library_songs(self):
-        self.listbox.delete(0, "end")
-        self.songs = db.get_songs()
-        for s in self.songs:
-            self.listbox.insert("end", s["title"] or s["filename"])
+        self.listbox.delete(0, END)
+        library_songs = db.get_songs()
+        self.songs = library_songs  # keep self.songs synced
+        for s in library_songs:
+            self.listbox.insert(END, s["title"] or s["filename"])
 
-    # Play selected song
-    def play_song(self):
+    def load_songs_for_playlist(self, playlist_id):
+        self.listbox.delete(0, END)
+        playlist_songs = db.get_songs_in_playlist(playlist_id)
+        self.songs = playlist_songs  # update current songs list
+        for song in playlist_songs:
+            self.listbox.insert(END, song["title"] or song["filename"])
+
+    # Play / resume toggle
+    def toggle_play(self):
         sel = self.listbox.curselection()
         if not sel:
             return
 
         index = sel[0]
         song = self.songs[index]
-        filepath = os.path.join(SONG_DIR, song["filename"])
+        new_song_path = os.path.join(SONG_DIR, song["filename"])
 
-        self.player = vlc.MediaPlayer(filepath)
-        self.player.play()
-        
-        self.playing = True
-        self.song_length = 0  # temporarily unknown
-        self.progress.set(0)
+        # If a different song is selected, stop old and play new
+        if self.current_song != new_song_path:
+            if self.player:
+                self.player.stop()
+            self.player = vlc.MediaPlayer(new_song_path)
+            self.current_song = new_song_path
+            self.current_pos = 0
+            self.player.play()
+            self.playing = True
+            self.paused = False
+            self.update_progress()
+            return
 
-        # Start updating progress
-        self.update_progress()
+        # Otherwise handle play/pause/restart for the same song
+        state = self.player.get_state() if self.player else vlc.State.Stopped
 
+        if state in (vlc.State.Ended, vlc.State.Stopped):
+            self.player.stop()
+            self.player = vlc.MediaPlayer(self.current_song)
+            self.current_pos = 0
+            self.player.play()
+            self.playing = True
+            self.paused = False
+            self.update_progress()
+        elif state == vlc.State.Playing:
+            self.player.pause()
+            self.paused = True
+            self.playing = False
+        elif state == vlc.State.Paused:
+            self.player.play()
+            self.paused = False
+            self.playing = True
 
-    # Stop playback
+    # Stop completely
     def stop_song(self):
         if self.player:
             self.player.stop()
         self.playing = False
-        self.progress.set(0)
+        self.paused = False
+        self.current_pos = 0
+        self.progress_var.set(0)
         if self.update_job:
             self.frame.after_cancel(self.update_job)
             self.update_job = None
@@ -94,23 +126,27 @@ class PlayerGUI:
                 self.song_length = length_ms / 1000
                 self.progress.config(to=self.song_length)
 
-            if pos_ms > 0 and self.song_length > 0:
+            if pos_ms >= 0 and self.song_length > 0:
                 pos_s = pos_ms / 1000
-                pos_s = min(pos_s, self.song_length)  # clamp
-                self.progress.set(pos_s)
+                pos_s = min(pos_s, self.song_length)
+                self.progress_var.set(pos_s)
 
-                # Check for end-of-song with tolerance
+                # End-of-song
                 if pos_s >= self.song_length - 0.5:
-                    self.stop_song()
-                    return
+                    if self.repeat:
+                        self.toggle_play()  # replay
+                    else:
+                        self.stop_song()
+                        return
 
         self.update_job = self.frame.after(200, self.update_progress)
 
-    # Seek song
+    # Seek
     def seek_song(self, value):
         if self.player:
             self.seeking = True
             self.player.set_time(int(float(value) * 1000))
+            self.current_pos = self.player.get_time()
             self.seeking = False
 
     # Add song to playlist
