@@ -1,6 +1,6 @@
 import os
 import shutil
-from tkinter import Listbox, filedialog, simpledialog, ttk, DoubleVar, END
+from tkinter import Listbox, filedialog, simpledialog, ttk, DoubleVar, StringVar, END
 import vlc
 from tinytag import TinyTag
 from db import database as db  # your database module
@@ -18,6 +18,12 @@ class PlayerGUI:
         self.listbox = Listbox(self.frame, height=10)
         self.listbox.pack(fill="both", expand=True, padx=5, pady=5)
 
+        # Progress bar (seek)
+        self.progress_var = DoubleVar()
+        self.progress_var.set(0)
+        self.progress = ttk.Scale(self.frame, from_=0, to=100, variable=self.progress_var, orient="horizontal", command=self.seek_song)
+        self.progress.pack(fill="x", pady=(5,5))
+
         # Buttons
         self.add_to_playlist_btn = ttk.Button(self.frame, text="Add to Playlist", command=self.add_song_to_playlist)
         self.play_btn = ttk.Button(self.frame, text="Play", command=self.toggle_play)
@@ -26,11 +32,21 @@ class PlayerGUI:
         self.play_btn.pack(side="left", padx=5)
         self.stop_btn.pack(side="left", padx=5)
 
-        # Progress bar (seek)
-        self.progress_var = DoubleVar()
-        self.progress_var.set(0)
-        self.progress = ttk.Scale(self.frame, from_=0, to=100, variable=self.progress_var, orient="horizontal", command=self.seek_song)
-        self.progress.pack(fill="x")
+        # Repeat options
+        self.repeat_var = StringVar()
+        self.repeat_var.set("No Repeat")  # default option
+
+        self.repeat_menu = ttk.OptionMenu(
+            self.frame,
+            self.repeat_var,
+            "No Repeat",            # default
+            "No Repeat",
+            "Repeat Playlist",
+            "Repeat Song"
+        )
+        self.repeat_menu.pack(side="right", padx=5)
+
+        
 
         # VLC player
         self.player = None
@@ -61,13 +77,30 @@ class PlayerGUI:
         for song in playlist_songs:
             self.listbox.insert(END, song["title"] or song["filename"])
 
-    # Play / resume toggle
+    # Stop completely
+    def stop_song(self):
+        if self.player:
+            self.player.stop()
+        self.playing = False
+        self.paused = False
+        self.current_pos = 0
+        self.progress_var.set(0)
+        if self.update_job:
+            self.frame.after_cancel(self.update_job)
+            self.update_job = None
+
+    # Play/Resume songs
     def toggle_play(self):
         sel = self.listbox.curselection()
-        if not sel:
-            return
 
-        index = sel[0]
+        # If no song selected, default to first song
+        if not sel:
+            if not self.songs:
+                return
+            index = 0
+        else:
+            index = sel[0]
+
         song = self.songs[index]
         new_song_path = os.path.join(SONG_DIR, song["filename"])
 
@@ -75,8 +108,9 @@ class PlayerGUI:
         if self.current_song != new_song_path:
             if self.player:
                 self.player.stop()
-            self.player = vlc.MediaPlayer(new_song_path)
             self.current_song = new_song_path
+            self.current_index = index
+            self.player = vlc.MediaPlayer(self.current_song)
             self.current_pos = 0
             self.player.play()
             self.playing = True
@@ -88,7 +122,9 @@ class PlayerGUI:
         state = self.player.get_state() if self.player else vlc.State.Stopped
 
         if state in (vlc.State.Ended, vlc.State.Stopped):
-            self.player.stop()
+            # Restart current song
+            if self.player:
+                self.player.stop()
             self.player = vlc.MediaPlayer(self.current_song)
             self.current_pos = 0
             self.player.play()
@@ -104,41 +140,72 @@ class PlayerGUI:
             self.paused = False
             self.playing = True
 
-    # Stop completely
-    def stop_song(self):
-        if self.player:
-            self.player.stop()
-        self.playing = False
-        self.paused = False
-        self.current_pos = 0
-        self.progress_var.set(0)
-        if self.update_job:
-            self.frame.after_cancel(self.update_job)
-            self.update_job = None
+    def play_next_song(self):
+        repeat_option = self.repeat_var.get()  # "No Repeat", "Repeat Song", "Repeat Playlist"
 
-    # Update progress bar
+        if repeat_option == "Repeat Song":
+            # replay current song
+            if self.player:
+                self.player.stop()
+            self.player = vlc.MediaPlayer(self.current_song)
+            self.player.play()
+            self.playing = True
+            self.paused = False
+            self.progress_var.set(0)
+            self.update_progress()
+            return
+
+        # Play next in list if available
+        if self.current_index is not None and self.current_index + 1 < len(self.songs):
+            self.current_index += 1
+            next_song = self.songs[self.current_index]
+            self.current_song = os.path.join(SONG_DIR, next_song["filename"])
+            if self.player:
+                self.player.stop()
+            self.player = vlc.MediaPlayer(self.current_song)
+            self.player.play()
+            self.playing = True
+            self.paused = False
+            self.progress_var.set(0)
+            self.update_progress()
+        else:
+            if repeat_option == "Repeat Playlist":
+                # start playlist from beginning
+                self.current_index = 0
+                first_song = self.songs[self.current_index]
+                self.current_song = os.path.join(SONG_DIR, first_song["filename"])
+                if self.player:
+                    self.player.stop()
+                self.player = vlc.MediaPlayer(self.current_song)
+                self.player.play()
+                self.playing = True
+                self.paused = False
+                self.progress_var.set(0)
+                self.update_progress()
+            else:
+                # No Repeat, stop playback
+                self.stop_song()
+                self.current_index = None
+                self.current_song = None
+
     def update_progress(self):
         if self.player and self.playing and not self.seeking:
             length_ms = self.player.get_length()
             pos_ms = self.player.get_time()
 
             if length_ms > 0:
-                self.song_length = length_ms / 1000
-                self.progress.config(to=self.song_length)
+                self.progress.config(to=length_ms / 1000)
 
-            if pos_ms >= 0 and self.song_length > 0:
-                pos_s = pos_ms / 1000
-                pos_s = min(pos_s, self.song_length)
+            if pos_ms >= 0 and length_ms > 0:
+                pos_s = min(pos_ms / 1000, length_ms / 1000)
                 self.progress_var.set(pos_s)
 
-                # End-of-song
-                if pos_s >= self.song_length - 0.5:
-                    if self.repeat:
-                        self.toggle_play()  # replay
-                    else:
-                        self.stop_song()
-                        return
+                # If song ended, move to next according to repeat mode
+                if pos_s >= (length_ms / 1000) - 0.2:
+                    self.play_next_song()
+                    return
 
+        # Keep updating every 200ms
         self.update_job = self.frame.after(200, self.update_progress)
 
     # Seek
