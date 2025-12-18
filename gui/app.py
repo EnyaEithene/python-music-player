@@ -1,11 +1,13 @@
-from tkinter import Tk
-from tkinter import Menu, messagebox, filedialog
+import tkinter as tk
+from tkinter import ttk
+from tkinter import Menu, messagebox, filedialog, Toplevel, Listbox
 from gui.player import PlayerGUI
 from gui.playlist import PlaylistGUI
-import db.database
+from gui.history import HistoryWindow
+import db.database as db
 
 class MusicApp:
-    # Definire fereastra aplicatie
+    #--------------- Initializare clasa ---------------
     def __init__(self, root):
         self.root = root
         self.root.title("Music Player")
@@ -23,7 +25,7 @@ class MusicApp:
         self.menu_bar = Menu(root)
         root.config(menu=self.menu_bar)
 
-        # File menu
+        # Meniu "File"
         file_menu = Menu(self.menu_bar, tearoff=0)
         file_menu.add_command(label="Add Songs", command=self.player.add_songs_to_library)
         file_menu.add_command(label="Add Playlist", command=self.playlists.add_playlist)
@@ -31,11 +33,13 @@ class MusicApp:
         file_menu.add_command(label="Exit", command=root.quit)
         self.menu_bar.add_cascade(label="File", menu=file_menu)
 
-        # Help menu
+        # Meniu "Help"
         help_menu = Menu(self.menu_bar, tearoff=0)
+        help_menu.add_command(label="View Modifications", command=self.show_modifications)
         help_menu.add_command(label="About", command=self.show_about)
         self.menu_bar.add_cascade(label="Help", menu=help_menu)
-
+        
+    #--------------- Adaugare melodie ---------------    
     def add_songs(self):
         filepaths = filedialog.askopenfilenames(
             title="Select Songs",
@@ -43,6 +47,7 @@ class MusicApp:
         )
         print("Selected files:", filepaths)
 
+    #--------------- Redare melodie selectata ---------------
     def play_selected_song(self):
         selection = self.library_listbox.curselection()
         if not selection:
@@ -52,6 +57,11 @@ class MusicApp:
         song_path = self.library_songs[index]["filepath"]
 
         self.player.play_song(song_path)
+    
+    #--------------- Afisare modificari (history.py) ---------------
+    def show_modifications(self):
+        HistoryWindow(self.root)
 
+    #--------------- Afisare detalii aplicatie ---------------
     def show_about(self):
-        messagebox.showinfo("About", "Music Player v1.0")
+        messagebox.showinfo("About", "Music Player v0.1 by Enya Donisan, gr. AID-1")
