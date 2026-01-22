@@ -155,7 +155,7 @@ class PlayerGUI:
                     entity_id=song["id"],
                     action="song_deleted"
                 )
-                # Stergere melodia din playlist
+                # Opțional: șterge melodia din playlist
                 db.delete_song_from_playlist(playlist_id, song["id"])
 
         self.songs = valid_songs

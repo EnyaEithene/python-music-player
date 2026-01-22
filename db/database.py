@@ -132,7 +132,7 @@ def delete_song_from_playlist(playlist_id, song_id):
     cur.execute(
         """
         UPDATE playlist_songs 
-        SET deleted = 1, date_modified = CURRENT_TIMESTAMP
+        SET deleted = 1, date_modified = datetime(current_timestamp, 'localtime')
         WHERE id_playlist = ? AND id_song = ?
         """,
         (playlist_id, song_id)

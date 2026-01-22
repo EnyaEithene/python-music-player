@@ -24,8 +24,7 @@ class MusicApp:
         self.player = PlayerGUI(self.content, self)
 
         # Director cu melodii
-        self.songs_dir = Path(__file__).parent / "songs"
-        # Serviciu playlist + export
+        self.songs_dir = Path(__file__).resolve().parent.parent / "songs"
         self.playlist_service = PlaylistService(db.db, self.songs_dir)
         self.exporter = PlaylistExporter(self.playlist_service)
         
