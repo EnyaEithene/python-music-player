@@ -31,6 +31,8 @@ class HistoryWindow:
             return f"Added '{h['song_title']}' to '{h['playlist_name']}'"
         if action == "song_removed":
             return f"Removed '{h['song_title']}' from '{h['playlist_name']}'"
+        if action == "song_deleted_playlist":
+            return f"Deleted '{h['song_title']}' from playlist '{h['playlist_name']}'"
 
         return "Unknown event"
 
@@ -43,7 +45,7 @@ class HistoryWindow:
             location = h["playlist_name"] if h["playlist_name"] else "Library"
             song_title = h["song_title"] or ""
 
-            if h["action"] == "created":                                    # Descriere coerenta a modificarii
+            if h["action"] == "created":        # Descriere coerenta a modificarii
                 details = f"Playlist '{location}' created"
             elif h["action"] == "deleted":
                 details = f"Playlist '{location}' deleted"
@@ -53,9 +55,11 @@ class HistoryWindow:
                 details = f"Removed '{song_title}' from '{location}'"
             elif h["action"] == "song_deleted":
                 details = f"Deleted song '{song_title}' from Library"
+            elif h["action"] == "song_deleted_playlist":
+                details = f"Deleted '{song_title}' from playlist '{location}'"
             else:
                 details = "Unknown event"
-
+            
             self.history_table.insert(                                      # Inserare date in tabel
                 "",
                 "end",

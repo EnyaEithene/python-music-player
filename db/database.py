@@ -1,5 +1,6 @@
 # ---------- IMPORTARI ----------
 import sqlite3
+from pathlib import Path
 
 # ---------- Baza de date ----------
 db = sqlite3.connect("music.db")   # conectare la BD
@@ -108,7 +109,7 @@ def get_songs_in_playlist(playlist_id):
         SELECT s.*
         FROM songs s
         JOIN playlist_songs ps ON s.id = ps.id_song
-        WHERE ps.id_playlist=? AND s.deleted=0
+        WHERE ps.id_playlist=? AND s.deleted=0 AND ps.deleted=0
         """,
         (playlist_id,)
     ).fetchall()
@@ -137,7 +138,7 @@ def delete_song_from_playlist(playlist_id, song_id):
         (playlist_id, song_id)
     )
     entity_ref = f"{playlist_id}:{song_id}"
-    cur.execute("INSERT INTO history (entity_type, entity_id, action) VALUES ('playlist_song', ?, 'song_deleted_playlist')", (entity_ref,))
+    cur.execute("INSERT INTO history (entity_type, entity_id, related_id, action) VALUES ('playlist_song', ?, ?, 'song_deleted_playlist')", (song_id,playlist_id))
     db.commit()
 
 #--------------- PT. ISTORIC ----------------
@@ -160,4 +161,26 @@ def get_history():
         ORDER BY h.timestamp DESC
     """).fetchall()
 
+def add_history(entity_type, entity_id, action):
+    if entity_type == "library":
+        return
+    cur.execute(
+        "INSERT INTO history (entity_type, entity_id, action) VALUES (?, ?, ?)",
+        (entity_type, entity_id, action)
+    )
+    db.commit()
 
+#--------------- PT. EXPORTARE ----------------
+def get_playlist_filenames(db_path: Path, playlist_id: int) -> list[str]:
+    cur.execute("""
+        SELECT s.filename
+        FROM songs s
+        JOIN playlist_songs ps ON ps.id_song = s.id
+        WHERE ps.id_playlist = ?
+          AND s.deleted = 0
+          AND ps.deleted = 0
+        ORDER BY ps.date_added
+    """, (playlist_id,))
+
+    filenames = [row[0] for row in cur.fetchall()]
+    return filenames

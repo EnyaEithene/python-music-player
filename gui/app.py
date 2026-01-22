@@ -1,15 +1,19 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter import Menu, messagebox, filedialog, Toplevel, Listbox
+from pathlib import Path
 from gui.player import PlayerGUI
 from gui.playlist import PlaylistGUI
 from gui.history import HistoryWindow
 import db.database as db
+from services.playlist_service import PlaylistService
+from services.export_service import PlaylistExporter
 
 class MusicApp:
     #--------------- Initializare clasa ---------------
-    def __init__(self, root):
+    def __init__(self, root, exporter):
         self.root = root
+        self.exporter = exporter
         self.root.title("Music Player")
 
         # Frame pentru continut
@@ -18,6 +22,12 @@ class MusicApp:
         # Initializare componente
         self.playlists = PlaylistGUI(self.content, self)
         self.player = PlayerGUI(self.content, self)
+
+        # Director cu melodii
+        self.songs_dir = Path(__file__).parent / "songs"
+        # Serviciu playlist + export
+        self.playlist_service = PlaylistService(db.db, self.songs_dir)
+        self.exporter = PlaylistExporter(self.playlist_service)
         
         # Bara meniuri
         self.root.option_add('*tearOff', False)
@@ -29,6 +39,8 @@ class MusicApp:
         file_menu = Menu(self.menu_bar, tearoff=0)
         file_menu.add_command(label="Add Songs", command=self.player.add_songs_to_library)
         file_menu.add_command(label="Add Playlist", command=self.playlists.add_playlist)
+        file_menu.add_separator()
+        file_menu.add_command(label="Export Playlist", command=self.export_playlist)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=root.quit)
         self.menu_bar.add_cascade(label="File", menu=file_menu)
@@ -46,6 +58,32 @@ class MusicApp:
             filetypes=[("MP3 files", "*.mp3"), ("All files", "*.*")]
         )
         print("Selected files:", filepaths)
+
+    #--------------- Exportare playlist ---------------
+    def export_playlist(self):
+        # Selectează playlist
+        sel = self.playlists.listbox.curselection()
+        if not sel:
+            return
+        index = sel[0]
+
+        # Obține id-ul playlist-ului din DB
+        playlists = db.get_playlists()
+        playlist_id = playlists[index]["id"]
+        playlist_name = playlists[index]["name"]
+
+        # Alege locația de salvare ZIP
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".zip",
+            filetypes=[("ZIP files", "*.zip")],
+            initialfile=f"{playlist_name}.zip"
+        )
+        if not file_path:
+            return
+
+        # Export
+        self.exporter.export_zip(playlist_id, playlist_name, Path(file_path))
+        messagebox.showinfo("Export", f"Playlist '{playlist_name}' exported successfully!")
 
     #--------------- Redare melodie selectata ---------------
     def play_selected_song(self):

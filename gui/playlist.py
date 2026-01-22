@@ -102,3 +102,12 @@ class PlaylistGUI:
             songs = db.get_all_songs()
             for s in songs:
                 self.song_list.insert(END, f"{s[2]} - {s[3]}")  # title - artist
+
+    #--------------- Preluare id playlist ---------------
+    def get_selected_playlist_id(self):
+        selection = self.listbox.curselection()
+        if not selection:
+            return None
+        index = selection[0]
+        playlists = db.get_playlists()
+        return playlists[index]["id"]
